@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文档互转工具</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --line: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --bad: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(960px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 40px 0 72px;
+    }
+    h1 { margin: 0 0 8px; font-size: 32px; }
+    .subtitle { margin: 0 0 24px; color: var(--muted); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(2, 6, 23, 0.25);
+    }
+    .dropzone {
+      border: 2px dashed #475569;
+      border-radius: 16px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+    .dropzone:hover, .dropzone.dragging {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .dropzone strong { display: block; margin-bottom: 8px; }
+    .dropzone span { color: var(--muted); }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin: 18px 0;
+    }
+    label { color: var(--muted); font-size: 14px; display: block; margin-bottom: 8px; }
+    select {
+      width: 100%;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #0b1220;
+      color: var(--text);
+      padding: 0 14px;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      background: var(--accent);
+      color: #06233a;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .status {
+      margin-top: 16px;
+      min-height: 24px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .status.ok { background: rgba(34, 197, 94, 0.12); color: var(--ok); padding: 12px; border-radius: 12px; }
+    .status.bad { background: rgba(239, 68, 68, 0.12); color: var(--bad); padding: 12px; border-radius: 12px; }
+    .note {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    @media (max-width: 720px) {
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>高质量文档互转</h1>
+    <p class="subtitle">支持 PDF、Word、PPT 互转；复杂文件建议转换后校对。</p>
+    <section class="card">
+      <form id="convert-form">
+        <div class="dropzone" id="dropzone">
+          <strong>拖拽文件到这里，或点击选择文件</strong>
+          <span>支持 .pdf .doc .docx .ppt .pptx</span>
+          <input id="file-input" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" hidden>
+        </div>
+        <div class="row">
+          <div>
+            <label for="file-name">文件名</label>
+            <select id="file-name" disabled><option>未选择文件</option></select>
+          </div>
+          <div>
+            <label for="target">目标格式</label>
+            <select id="target">
+              <option value="pdf">PDF</option>
+              <option value="docx">Word (.docx)</option>
+              <option value="pptx">PPT (.pptx)</option>
+            </select>
+          </div>
+        </div>
+        <button id="convert-button" type="submit">开始转换</button>
+        <div id="status" class="status">等待上传文件。</div>
+      </form>
+      <p class="note">
+        说明：普通文档转换稳定；扫描版、复杂版面、特殊字体的 PDF 转换结果可能有漂移，建议下载后人工检查。
+      </p>
+    </section>
+  </main>
+  <script>
+    const fileInput = document.getElementById('file-input');
+    const dropzone = document.getElementById('dropzone');
+    const fileNameSelect = document.getElementById('file-name');
+    const targetSelect = document.getElementById('target');
+    const statusBox = document.getElementById('status');
+    const form = document.getElementById('convert-form');
+    const button = document.getElementById('convert-button');
+    let selectedFile = null;
+
+    function updateFileLabel() {
+      fileNameSelect.innerHTML = selectedFile ? `<option>${selectedFile.name}</option>` : '<option>未选择文件</option>';
+      fileNameSelect.disabled = !selectedFile;
+    }
+
+    function syncTargetOptions() {
+      if (!selectedFile) return;
+      const suffix = selectedFile.name.split('.').pop().toLowerCase();
+      const allowed = {
+        pdf: ['docx', 'pptx'],
+        doc: ['pdf', 'pptx'],
+        docx: ['pdf', 'pptx'],
+        ppt: ['pdf', 'docx'],
+        pptx: ['pdf', 'docx'],
+      };
+      const choices = allowed[suffix] || [];
+      targetSelect.innerHTML = choices
+        .map((value) => `<option value="${value}">${value.toUpperCase()}</option>`)
+        .join('');
+    }
+
+    function setFile(file) {
+      selectedFile = file;
+      updateFileLabel();
+      syncTargetOptions();
+      statusBox.className = 'status';
+      statusBox.textContent = `已选择 ${file.name}，请选择目标格式后点击开始转换。`;
+    }
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) setFile(fileInput.files[0]);
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dropzone.classList.add('dragging');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragging'));
+    dropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('dragging');
+      if (event.dataTransfer.files.length) {
+        setFile(event.dataTransfer.files[0]);
+        fileInput.files = event.dataTransfer.files;
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!selectedFile) {
+        statusBox.className = 'status bad';
+        statusBox.textContent = '请先选择文件。';
+        return;
+      }
+      button.disabled = true;
+      statusBox.className = 'status';
+      statusBox.textContent = `正在上传并转换 ${selectedFile.name} ...`;
+      const data = new FormData();
+      data.append('file', selectedFile);
+      data.append('target', targetSelect.value);
+      try {
+        const response = await fetch('/api/convert', { method: 'POST', body: data });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.detail || '转换请求失败');
+        }
+        if (result.status === 'completed' && result.download_url) {
+          statusBox.className = 'status ok';
+          statusBox.innerHTML = `转换完成，<a href="${result.download_url}" style="color:inherit;text-decoration:underline;">点击下载</a>`;
+        } else {
+          statusBox.className = 'status bad';
+          statusBox.textContent = result.message || '转换失败，请检查文件内容或稍后再试。';
+        }
+      } catch (error) {
+        statusBox.className = 'status bad';
+        statusBox.textContent = error.message || '转换失败，请检查网络后重试。';
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
