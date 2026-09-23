@@ -1,8 +1,15 @@
 services:
-  - type: docker
+  - type: web
     name: doc2doc-web
-    dockerfilePath: Dockerfile
+    runtime: python
     plan: free
-    env:
+    region: oregon
+    pythonVersion: 3.10.15
+    buildCommand: |
+      apt-get update
+      apt-get install -y --no-install-recommends libreoffice-writer libreoffice-impress libreoffice-calc libreoffice-core libreoffice-common fonts-noto-cjk poppler-utils
+      pip install -r requirements.txt
+    startCommand: |
+      python -m uvicorn main:app --host 0.0.0.0 --port=    envVars:
       - key: PORT
-        value: "8000"
+        value: 8000
