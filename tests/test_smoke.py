@@ -20,12 +20,13 @@ def test_index_returns_html(client: TestClient) -> None:
     assert '文档互转工具' in response.text
 
 
-def test_health_reports_libreoffice_flag(client: TestClient) -> None:
+def test_health_reports_engines(client: TestClient) -> None:
     response = client.get('/health')
     assert response.status_code == 200
     payload = response.json()
     assert payload['status'] == 'ok'
-    assert isinstance(payload['libreoffice'], bool)
+    assert 'libreoffice' in payload['engines']
+    assert 'pdf2docx' in payload['engines']
 
 
 def test_invalid_conversion_pair_returns_400(client: TestClient) -> None:
